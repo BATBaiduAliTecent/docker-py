@@ -1,11 +1,15 @@
-import unittest
+import os
+import six
+from StringIO import StringIO
 import time
+import unittest
+
 
 import docker
 
 # FIXME: missing tests for
-# build; export; history; import_image; insert; port; push;
-# remove_image; tag; kill/stop/start/wait/restart (multi)
+# export; history; import_image; insert; port; push;
+# tag; kill/stop/start/wait/restart (multi)
 
 class BaseTestCase(unittest.TestCase):
     tmp_imgs = []
@@ -53,20 +57,24 @@ class TestSearch(BaseTestCase):
 
 class TestImages(BaseTestCase):
     def runTest(self):
-        res1 = self.client.images()
-        self.assertEqual(len(res1), self.client.info()['Images'])
-        res10 = res1[0]
+        res1 = self.client.images(all=True)
+        self.assertIn('Id', res1[0])
+        res10 = [x for x in res1 if x['Id'].startswith('e9aa60c60128')][0]
         self.assertIn('Created', res10)
-        self.assertIn('Id', res10)
         self.assertIn('Repository', res10)
         self.assertIn('Tag', res10)
         self.assertEqual(res10['Tag'], 'latest')
         self.assertEqual(res10['Repository'], 'busybox')
+        distinct = []
+        for img in res1:
+            if img['Id'] not in distinct:
+                distinct.append(img['Id'])
+        self.assertEqual(len(distinct), self.client.info()['Images'])
 
 class TestImageIds(BaseTestCase):
     def runTest(self):
         res1 = self.client.images(quiet=True)
-        self.assertEqual(type(res1[0]), unicode)
+        self.assertEqual(type(res1[0]), six.text_type)
 
 class TestListContainers(BaseTestCase):
     def runTest(self):
@@ -96,6 +104,27 @@ class TestCreateContainer(BaseTestCase):
         res = self.client.create_container('busybox', 'true')
         self.assertIn('Id', res)
         self.tmp_containers.append(res['Id'])
+
+class TestCreateContainerWithBinds(BaseTestCase):
+    def runTest(self):
+        mount_dest = '/mnt'
+        mount_origin = os.getcwd()
+
+        filename = 'shared.txt'
+        shared_file = os.path.join(mount_origin, filename)
+
+        with open(shared_file, 'w'):
+            container = self.client.create_container('busybox',
+                ['ls', mount_dest], volumes={mount_dest: {}})
+            container_id = container['Id']
+            self.client.start(container_id, binds={mount_origin: mount_dest})
+            self.tmp_containers.append(container_id)
+            exitcode = self.client.wait(container_id)
+            self.assertEqual(exitcode, 0)
+            logs = self.client.logs(container_id)
+
+        os.unlink(shared_file)
+        self.assertIn(filename, logs)
 
 class TestStartContainer(BaseTestCase):
     def runTest(self):
@@ -132,14 +161,14 @@ class TestLogs(BaseTestCase):
     def runTest(self):
         snippet = 'Flowering Nights (Sakuya Iyazoi)'
         container = self.client.create_container('busybox',
-            ['echo', '-n', '"{0}"'.format(snippet)])
+            'echo {0}'.format(snippet))
         id = container['Id']
         self.client.start(id)
         self.tmp_containers.append(id)
         exitcode = self.client.wait(id)
         self.assertEqual(exitcode, 0)
         logs = self.client.logs(id)
-        self.assertEqual(logs.read(), snippet)
+        self.assertEqual(logs, snippet + '\n')
 
 class TestDiff(BaseTestCase):
     def runTest(self):
@@ -226,15 +255,17 @@ class TestRemoveContainer(BaseTestCase):
 class TestPull(BaseTestCase):
     def runTest(self):
         self.client.remove_image('joffrey/test001')
+        self.client.remove_image('376968a23351')
         info = self.client.info()
         self.assertIn('Images', info)
         img_count = info['Images']
         res = self.client.pull('joffrey/test001')
-        self.assertEqual(type(res), unicode)
-        self.assertEqual(img_count + 1, self.client.info()['Images'])
+        self.assertEqual(type(res), six.text_type)
+        self.assertEqual(img_count + 2, self.client.info()['Images'])
         img_info = self.client.inspect_image('joffrey/test001')
         self.assertIn('id', img_info)
         self.tmp_imgs.append('joffrey/test001')
+        self.tmp_imgs.append('376968a23351')
 
 class TestCommit(BaseTestCase):
     def runTest(self):
@@ -271,6 +302,37 @@ class TestRemoveImage(BaseTestCase):
         images = self.client.images(all=True)
         res = [x for x in images if x['Id'].startswith(img_id)]
         self.assertEqual(len(res), 0)
+
+#################
+# BUILDER TESTS #
+#################
+
+class TestBuild(BaseTestCase):
+    def runTest(self):
+        script = StringIO('\n'.join([
+            'FROM busybox',
+            'MAINTAINER docker-py',
+            'RUN mkdir -p /tmp/test',
+            'EXPOSE 8080',
+            'ADD https://dl.dropboxusercontent.com/u/20637798/silence.tar.gz /tmp/silence.tar.gz'
+        ]))
+        img, logs = self.client.build(fileobj=script)
+        self.assertNotEqual(img, None)
+        self.assertNotEqual(img, '')
+        self.assertNotEqual(logs, '')
+        container1 = self.client.create_container(img, 'test -d /tmp/test')
+        id1 = container1['Id']
+        self.client.start(id1)
+        self.tmp_containers.append(id1)
+        exitcode1 = self.client.wait(id1)
+        self.assertEqual(exitcode1, 0)
+        container2 = self.client.create_container(img, 'test -d /tmp/test')
+        id2 = container2['Id']
+        self.client.start(id2)
+        self.tmp_containers.append(id2)
+        exitcode2 = self.client.wait(id2)
+        self.assertEqual(exitcode2, 0)
+        self.tmp_imgs.append(img)
 
 #######################
 ## PY SPECIFIC TESTS ##
