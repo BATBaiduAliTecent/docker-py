@@ -1,6 +1,100 @@
 ChangeLog
 =========
 
+0.2.2
+-----
+
+* Added support for the `rm` parameter in `Client.build`
+* Added support for tarball imports in `Client.import_image` through `data`
+  parameter.
+* The `command` parameter in `Client.create_container` is now optional (for
+  containers that include a default run command)
+
+### Bugfixes
+
+* Fixed Python 3 support
+* Fixed a bug where anonymous push/pull would break when no authconfig is
+  present
+* Fixed a bug where the `quiet` parameter wouldn't be taken into account in
+  `Client.containers`
+* Fixed a bug where `Client.push` would break when pushing to private
+  registries.
+* Removed unused `registry` parameter in `Client.pull`.
+* Removed obsolete custom error message in `Client.create_container`.
+
+### Miscellaneous
+
+* docker-py is now unit-tested, and Travis-CI has been enabled on the
+  source repository.
+
+0.2.1
+-----
+
+* Improvements to the `tox.ini` file
+
+### Bugfixes
+
+* Fixed a bug where the package would fail with an `ImportError` if requests
+  was installed using `apt-get`
+* Fixed a bug where `Client.build` would fail if given a `path` parameter.
+* Fixed several bugs in `Client.login`. It should now work with API versions
+  1.4, 1.5.
+* Please note that `Client.login` currently doesn't write auth to the
+  `.dockercfg` file, thus **auth is not persistent when using this method.**
+
+0.2.0
+-----
+
+* **This version introduces breaking changes!**
+* `Client.kill`, `Client.remove_container`, `Client.remove_image`,
+`Client.restart`, `Client.start`, `Client.stop` and `Client.wait` don't support
+varargs anymore.
+* Added commands `Client.top` and `Client.copy`
+* Added `lxc_conf` parameter to `Client.start`
+* Added support for authentication in `Client.pull` (API version >=1.5)
+* Added support for privileged containers.
+* Error management overhaul. The new version should be more consistent and
+* All methods that expected a container ID as argument now also support a dict
+containing an `Id` key.
+* Added license header to python files.
+* Several `README.md` updates.
+
+### Bugfixes
+
+* Fixed several bugs with auth config parsing.
+* Fixed a bug in `Client.push` where it would raise an exception if
+the auth config wasn't loaded.
+* Fixed a bug in `Client.pull` where private registry images wouldn't be parsed
+properly if it contained port information.
+
+
+0.1.5
+-----
+
+* `Client.build` now uses tempfiles to store build context instead of storing
+it in memory
+* Added `nocache` option to `Client.build`
+* `Client.remove_container` now raises an exception when trying to remove a
+running container
+* `Client.create_container` now accepts dicts for the `environment` parameter
+
+### Bugfixes
+
+* Fixed a bug in `Client.create_container` on Python 2.6 where unicode
+commands would fail to be parsed
+* Fixed a bug in `Client.build` where the `tag` parameter would not be taken
+into account
+
+0.1.4
+-----
+
+* Added support for API connection through UNIX socket (default for docker 0.5.2+)
+
+0.1.3
+-----
+
+* The client now tries to load the auth config from `~/.dockercfg`. This is necessary to use the push command if API version is >1.0
+
 0.1.2
 -----
 
