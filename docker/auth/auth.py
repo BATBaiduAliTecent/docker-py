@@ -89,28 +89,32 @@ def decode_auth(auth):
         auth = auth.encode('ascii')
     s = base64.b64decode(auth)
     login, pwd = s.split(b':')
-    return login, pwd
+    return login.decode('ascii'), pwd.decode('ascii')
 
 
 def encode_header(auth):
-    auth_json = json.dumps(auth)
+    auth_json = json.dumps(auth).encode('ascii')
     return base64.b64encode(auth_json)
 
 
 def load_config(root=None):
-    if root is None:
-        root = os.environ['HOME']
-    config_file = {
+    root = root or os.environ['HOME']
+    config = {
         'Configs': {},
         'rootPath': root
     }
-    f = open(os.path.join(root, '.dockercfg'))
+
+    config_file = os.path.join(root, '.dockercfg')
+    if not os.path.exists(config_file):
+        return config
+
+    f = open(config_file)
     try:
-        config_file['Configs'] = json.load(f)
-        for k, conf in six.iteritems(config_file['Configs']):
+        config['Configs'] = json.load(f)
+        for k, conf in six.iteritems(config['Configs']):
             conf['Username'], conf['Password'] = decode_auth(conf['auth'])
             del conf['auth']
-            config_file['Configs'][k] = conf
+            config['Configs'][k] = conf
     except Exception:
         f.seek(0)
         buf = []
@@ -120,11 +124,12 @@ def load_config(root=None):
         if len(buf) < 2:
             raise Exception("The Auth config file is empty")
         user, pwd = decode_auth(buf[0])
-        config_file['Configs'][INDEX_URL] = {
+        config['Configs'][INDEX_URL] = {
             'Username': user,
             'Password': pwd,
             'Email': buf[1]
         }
     finally:
         f.close()
-    return config_file
+
+    return config
